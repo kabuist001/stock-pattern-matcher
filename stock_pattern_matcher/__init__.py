@@ -31,9 +31,15 @@ __email__ = "your.email@example.com"
 from .pattern_matcher import CandlePatternMatcher, calculate_statistics
 from .visualizer import PatternVisualizer, print_statistics
 
+# エイリアス（互換性のため）
+PatternMatcher = CandlePatternMatcher
+Visualizer = PatternVisualizer
+
 __all__ = [
     "CandlePatternMatcher",
     "PatternVisualizer",
+    "PatternMatcher",
+    "Visualizer",
     "calculate_statistics",
     "print_statistics",
 ]
