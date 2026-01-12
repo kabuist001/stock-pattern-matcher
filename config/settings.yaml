@@ -1,0 +1,82 @@
+# Stock Analysis Configuration File
+
+# ========================================
+# デバッグモード設定
+# ========================================
+debug:
+  mode: true  # true: GitHub にレポートアップロード / false: Colab表示のみ
+  verbose: true  # 詳細ログ出力
+
+# ========================================
+# GitHub設定
+# ========================================
+github:
+  owner: "kabuist001"
+  repo: "stock-pattern-matcher"
+  reports_folder: "reports"  # レポート保存先フォルダ
+  auto_create_issue_on_error: true  # エラー時に自動Issue作成
+
+# ========================================
+# データパス設定
+# ========================================
+# データパスはColab Secretsから読み込むため、ここでは設定不要
+# - STOCK_JSON_FOLDER: JSONデータのフォルダパス
+# - STOCK_RESULTS_FOLDER: 結果保存先（CSV）
+
+# ========================================
+# GPU設定
+# ========================================
+gpu:
+  enabled: true  # GPU使用の有効/無効
+  fallback_to_cpu: true  # GPU使用不可時にCPUで実行
+
+# ========================================
+# 分析パラメータ
+# ========================================
+analysis:
+  pattern_matching:
+    window_size: 20  # パターンの長さ（日数）
+    lookahead: 10  # 将来予測の期間（日数）
+    top_n: 15  # 各銘柄で返す上位マッチ数
+    min_similarity: 0.7  # 最小類似度（0-1）
+    method: "correlation"  # correlation, euclidean, weighted
+  
+  normalization:
+    method: "minmax"  # minmax, zscore, robust
+  
+  # 追加の分析機能（将来拡張用）
+  technical_indicators:
+    enabled: false
+    indicators: ["RSI", "MACD", "Bollinger Bands"]
+
+# ========================================
+# 可視化設定
+# ========================================
+visualization:
+  plotly:
+    theme: "plotly_white"  # plotly, plotly_white, plotly_dark
+    height: 600
+    width: 1000
+  
+  matplotlib:
+    style: "seaborn-v0_8-darkgrid"
+    figsize: [12, 8]
+    dpi: 100
+  
+  # レポートに含めるグラフ
+  graphs:
+    - "similarity_distribution"
+    - "top_matches_by_symbol"
+    - "future_return_distribution"
+    - "similarity_vs_return"
+    - "pattern_heatmap"
+
+# ========================================
+# レポート設定
+# ========================================
+report:
+  title: "Stock Pattern Analysis Report"
+  author: "Stock Analysis System"
+  include_raw_data: false  # 生データをレポートに含めるか
+  max_results_display: 50  # レポートに表示する最大結果数
+  timezone: "Asia/Tokyo"
