@@ -23,24 +23,30 @@ class StockDataLoader:
         self.symbols_data: Dict[str, pd.DataFrame] = {}
         self.metadata: Dict[str, any] = {}
     
-    def load_all_data(self) -> Dict[str, pd.DataFrame]:
+    def load_all_data(self, max_files: int = 0) -> Dict[str, pd.DataFrame]:
         """
         全てのJSONファイルを読み込み、銘柄ごとのDataFrameを返す
-        
+
+        Args:
+            max_files: 読み込むJSONファイル数の上限（0=無制限）
+
         Returns:
             銘柄コードをキー、DataFrameを値とする辞書
         """
         if not self.data_path.exists():
             raise FileNotFoundError(f"Data path not found: {self.data_path}")
-        
+
         # JSONファイルを取得
         json_files = list(self.data_path.glob('*.json')) + list(self.data_path.glob('*'))
         json_files = [f for f in json_files if f.is_file() and not f.name.startswith('.')]
-        
+
         if not json_files:
             raise FileNotFoundError(f"No JSON files found in {self.data_path}")
-        
-        print(f"📂 Found {len(json_files)} JSON files")
+
+        if max_files > 0:
+            json_files = json_files[:max_files]
+
+        print(f"📂 Loading {len(json_files)} JSON files")
         
         all_symbols = {}
         total_records = 0
@@ -221,9 +227,47 @@ class StockDataLoader:
             if len(df) >= min_records
         }
     
+    def save_cache(self, cache_path: str) -> None:
+        """
+        読み込み済みデータをpickleファイルに保存
+
+        Args:
+            cache_path: 保存先ファイルパス（.pkl）
+        """
+        import pickle
+        cache_path = Path(cache_path)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, 'wb') as f:
+            pickle.dump(self.symbols_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print(f"💾 Cache saved: {cache_path} ({len(self.symbols_data)} symbols)")
+
+    @classmethod
+    def load_cache(cls, cache_path: str) -> 'StockDataLoader':
+        """
+        pickleキャッシュからデータを復元
+
+        Args:
+            cache_path: キャッシュファイルパス（.pkl）
+
+        Returns:
+            復元されたStockDataLoaderインスタンス
+        """
+        import pickle
+        cache_path = Path(cache_path)
+        if not cache_path.exists():
+            raise FileNotFoundError(f"Cache not found: {cache_path}")
+        with open(cache_path, 'rb') as f:
+            symbols_data = pickle.load(f)
+        loader = cls.__new__(cls)
+        loader.data_path = Path('')
+        loader.symbols_data = symbols_data
+        loader.metadata = {'loaded_from_cache': str(cache_path)}
+        print(f"⚡ Cache loaded: {len(symbols_data)} symbols from {cache_path}")
+        return loader
+
     def __len__(self) -> int:
         """読み込まれた銘柄数を返す"""
         return len(self.symbols_data)
-    
+
     def __repr__(self) -> str:
         return f"StockDataLoader(symbols={len(self.symbols_data)}, path={self.data_path})"
