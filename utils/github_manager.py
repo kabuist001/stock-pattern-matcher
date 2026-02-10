@@ -58,6 +58,7 @@ class GitHubManager:
             response.raise_for_status()
             file_url = response.json()['content']['html_url']
             print(f"✅ Report uploaded: {file_url}")
+            self.display_report_links(file_path)
             return file_url
         except Exception as e:
             print(f"❌ Failed to upload report: {e}")
@@ -80,11 +81,27 @@ class GitHubManager:
             response.raise_for_status()
             file_url = response.json()['content']['html_url']
             print(f"✅ Report updated: {file_url}")
+            self.display_report_links(file_path)
             return file_url
         except Exception as e:
             print(f"❌ Failed to update report: {e}")
             return None
     
+    def get_preview_url(self, file_path: str) -> str:
+        """HTMLPreviewリンクを生成"""
+        return f"https://htmlpreview.github.io/?https://github.com/{self.owner}/{self.repo}/blob/main/{file_path}"
+
+    def display_report_links(self, file_path: str):
+        """Colab上でレポートリンクを表示"""
+        preview_url = self.get_preview_url(file_path)
+        print(f"📄 HTMLPreview: {preview_url}")
+        try:
+            from IPython.display import display, HTML
+            display(HTML(f'<a href="{preview_url}" target="_blank">📊 レポートを開く</a>'))
+            display(HTML(f'<iframe src="{preview_url}" width="100%" height="600"></iframe>'))
+        except ImportError:
+            pass
+
     def create_error_issue(self, error: Exception, context: Dict = None) -> Optional[str]:
         """エラー発生時にIssueを自動作成"""
         if not self.auto_create_issue:
