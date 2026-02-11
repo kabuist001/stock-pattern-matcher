@@ -54,7 +54,7 @@ class PatternMatcher:
         if use_gpu and not GPU_AVAILABLE:
             print("⚠️  GPU requested but not available. Using CPU instead.")
         elif self.use_gpu:
-            print(f"✅ Using GPU: {cp.cuda.Device().name}")
+            print(f"✅ Using GPU: Device {cp.cuda.Device().id}")
         else:
             print("📊 Using CPU")
     
