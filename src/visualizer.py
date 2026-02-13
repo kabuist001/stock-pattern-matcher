@@ -164,7 +164,77 @@ class Visualizer:
         )
         return fig
     
-    def create_all_plots(self, results_df: pd.DataFrame, symbols_data: Dict = None) -> Dict[str, go.Figure]:
+    def create_candlestick_chart(self, ohlc_df: pd.DataFrame, title: str) -> go.Figure:
+        """単体ローソク足チャートを生成"""
+        fig = go.Figure(data=[go.Candlestick(
+            x=list(range(len(ohlc_df))),
+            open=ohlc_df['open'],
+            high=ohlc_df['high'],
+            low=ohlc_df['low'],
+            close=ohlc_df['close'],
+            increasing_line_color='#26a69a',
+            decreasing_line_color='#ef5350'
+        )])
+        fig.update_layout(
+            title=title,
+            xaxis_title='日数',
+            yaxis_title='価格',
+            template=self.plotly_theme,
+            height=350,
+            width=self.plotly_width,
+            xaxis_rangeslider_visible=False,
+            showlegend=False
+        )
+        return fig
+
+    def create_match_detail_charts(
+        self,
+        results_df: pd.DataFrame,
+        symbols_data: Dict,
+        target_patterns: Dict,
+        top_n_symbols: int = 5,
+        top_n_matches: int = 3
+    ) -> Dict[str, go.Figure]:
+        """銘柄ごとにターゲットと上位マッチのローソク足チャートを生成"""
+        charts = {}
+        if target_patterns is None or symbols_data is None:
+            return charts
+
+        # 銘柄ごとに最高類似度でソートして上位を取得
+        if len(results_df) == 0:
+            return charts
+        best_per_symbol = results_df.groupby('symbol')['similarity'].max().sort_values(ascending=False)
+        top_symbols = best_per_symbol.head(top_n_symbols).index.tolist()
+
+        for symbol in top_symbols:
+            if symbol not in target_patterns or symbol not in symbols_data:
+                continue
+
+            # ターゲットパターンのチャート
+            target_df = target_patterns[symbol]
+            charts[f'target_{symbol}'] = self.create_candlestick_chart(
+                target_df, f'{symbol} - ターゲットパターン（直近{len(target_df)}日）'
+            )
+
+            # 上位マッチのチャート
+            symbol_matches = results_df[results_df['symbol'] == symbol].head(top_n_matches)
+            full_df = symbols_data[symbol]
+            window_size = len(target_df)
+
+            for rank, (_, row) in enumerate(symbol_matches.iterrows(), 1):
+                match_idx = int(row['match_index'])
+                match_df = full_df.iloc[match_idx:match_idx + window_size][['open', 'high', 'low', 'close']]
+                if len(match_df) == 0:
+                    continue
+                similarity = row['similarity']
+                future_ret = row.get('future_return')
+                ret_text = f' | リターン: {future_ret*100:+.2f}%' if pd.notna(future_ret) else ''
+                title = f'{symbol} - マッチ#{rank}（類似度: {similarity:.3f}{ret_text}）'
+                charts[f'match_{symbol}_{rank}'] = self.create_candlestick_chart(match_df, title)
+
+        return charts
+
+    def create_all_plots(self, results_df: pd.DataFrame, symbols_data: Dict = None, target_patterns: Dict = None) -> Dict[str, go.Figure]:
         """全てのグラフを生成"""
         plots = {}
         print("📊 グラフを生成中...")
@@ -185,7 +255,15 @@ class Visualizer:
         if 'pattern_heatmap' in graph_types:
             plots['pattern_heatmap'] = self.create_pattern_heatmap(results_df)
             print("  ✓ パターンヒートマップ")
-        
+
+        # ローソク足チャート
+        if target_patterns and symbols_data:
+            candlestick_charts = self.create_match_detail_charts(
+                results_df, symbols_data, target_patterns
+            )
+            plots.update(candlestick_charts)
+            print(f"  ✓ ローソク足チャート（{len(candlestick_charts)}個）")
+
         print(f"✅ {len(plots)}個のグラフを生成しました")
         return plots
     

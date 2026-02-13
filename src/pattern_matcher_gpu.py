@@ -222,53 +222,58 @@ class PatternMatcher:
         self,
         symbols_data: Dict[str, pd.DataFrame],
         progress_callback: Optional[callable] = None
-    ) -> pd.DataFrame:
+    ) -> tuple:
         """
         全銘柄のパターンマッチング分析
-        
+
         Args:
             symbols_data: 銘柄データの辞書
             progress_callback: 進捗コールバック関数
-            
+
         Returns:
-            結果のDataFrame
+            (results_df, target_patterns) のタプル
+            - results_df: 結果のDataFrame
+            - target_patterns: 銘柄ごとのターゲットOHLC DataFrame辞書
         """
         all_results = []
+        target_patterns = {}
         total_symbols = len(symbols_data)
-        
+
         print(f"🔍 Analyzing {total_symbols} symbols...")
-        
+
         for idx, (symbol, df) in enumerate(symbols_data.items(), 1):
             try:
                 # データが十分にあるかチェック
                 if len(df) < self.window_size + self.lookahead:
                     continue
-                
+
                 # 最新のパターンを抽出
-                target_pattern = df.iloc[-self.window_size:][['open', 'high', 'low', 'close']].values
-                
+                target_df = df.iloc[-self.window_size:]
+                target_pattern = target_df[['open', 'high', 'low', 'close']].values
+                target_patterns[symbol] = target_df[['open', 'high', 'low', 'close']].copy()
+
                 # パターンマッチング
                 results = self.find_similar_patterns(df, target_pattern, symbol)
                 all_results.extend(results)
-                
+
                 # 進捗表示
                 if progress_callback:
                     progress_callback(idx, total_symbols, symbol)
                 elif idx % 10 == 0:
                     print(f"  Progress: {idx}/{total_symbols} ({idx/total_symbols*100:.1f}%)")
-                
+
             except Exception as e:
                 print(f"⚠️  Error processing {symbol}: {e}")
                 continue
-        
+
         if all_results:
             results_df = pd.DataFrame(all_results)
             results_df = results_df.sort_values('similarity', ascending=False)
             print(f"✅ Found {len(results_df)} pattern matches")
-            return results_df
+            return results_df, target_patterns
         else:
             print("❌ No pattern matches found")
-            return pd.DataFrame()
+            return pd.DataFrame(), target_patterns
     
     def get_stats(self) -> Dict:
         """分析統計情報を取得"""
