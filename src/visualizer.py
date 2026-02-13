@@ -175,10 +175,14 @@ class Visualizer:
             increasing_line_color='#26a69a',
             decreasing_line_color='#ef5350'
         )])
+        y_min = ohlc_df['low'].min()
+        y_max = ohlc_df['high'].max()
+        y_margin = (y_max - y_min) * 0.05
         fig.update_layout(
             title=title,
             xaxis_title='日数',
             yaxis_title='価格',
+            yaxis_range=[y_min - y_margin, y_max + y_margin],
             template=self.plotly_theme,
             height=350,
             width=self.plotly_width,
