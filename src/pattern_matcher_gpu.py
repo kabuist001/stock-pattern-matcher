@@ -198,7 +198,7 @@ class PatternMatcher:
                 if len(future_data) > 0:
                     start_price = data.iloc[i + self.window_size - 1]['close']
                     end_price = future_data['close'].iloc[-1]
-                    future_return = (end_price - start_price) / start_price
+                    future_return = (end_price - start_price) / start_price if start_price != 0 else None
                 else:
                     future_return = None
                 
