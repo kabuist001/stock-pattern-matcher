@@ -164,24 +164,74 @@ class Visualizer:
         )
         return fig
     
-    def create_candlestick_chart(self, ohlc_df: pd.DataFrame, title: str) -> go.Figure:
-        """単体ローソク足チャートを生成"""
+    def create_candlestick_chart(
+        self, ohlc_df: pd.DataFrame, title: str,
+        base_price: float = None,
+        highlight_range: tuple = None,
+        initial_xrange: tuple = None
+    ) -> go.Figure:
+        """
+        ローソク足チャートを生成（%変化率で正規化）
+
+        Args:
+            ohlc_df: OHLC DataFrame
+            title: チャートタイトル
+            base_price: 正規化の基準価格（Noneなら先頭のclose）
+            highlight_range: (start_idx, end_idx) マッチ箇所を四角で囲む
+            initial_xrange: (x0, x1) 初期表示のX軸範囲
+        """
+        df = ohlc_df.copy()
+
+        # 基準価格で正規化（%変化率）
+        if base_price is None:
+            base_price = float(df['close'].iloc[0])
+        if base_price == 0:
+            base_price = 1.0
+        for col in ['open', 'high', 'low', 'close']:
+            df[col] = (df[col] / base_price - 1) * 100
+
         fig = go.Figure(data=[go.Candlestick(
-            x=list(range(len(ohlc_df))),
-            open=ohlc_df['open'],
-            high=ohlc_df['high'],
-            low=ohlc_df['low'],
-            close=ohlc_df['close'],
+            x=list(range(len(df))),
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
             increasing_line_color='#26a69a',
             decreasing_line_color='#ef5350'
         )])
-        y_min = ohlc_df['low'].min()
-        y_max = ohlc_df['high'].max()
-        y_margin = (y_max - y_min) * 0.05
-        fig.update_layout(
+
+        # マッチ箇所を四角で囲む
+        if highlight_range is not None:
+            hl_start, hl_end = highlight_range
+            hl_data = df.iloc[hl_start:hl_end + 1]
+            hl_y_min = hl_data['low'].min()
+            hl_y_max = hl_data['high'].max()
+            hl_y_margin = (hl_y_max - hl_y_min) * 0.05
+            fig.add_shape(
+                type="rect",
+                x0=hl_start - 0.5, x1=hl_end + 0.5,
+                y0=hl_y_min - hl_y_margin, y1=hl_y_max + hl_y_margin,
+                line=dict(color="#667eea", width=2),
+                fillcolor="rgba(102, 126, 234, 0.1)"
+            )
+
+        # Y軸範囲：初期表示範囲またはハイライト範囲に合わせる
+        if initial_xrange is not None:
+            view_start = max(0, int(initial_xrange[0]))
+            view_end = min(len(df), int(initial_xrange[1]) + 1)
+            view_data = df.iloc[view_start:view_end]
+        elif highlight_range is not None:
+            view_data = df.iloc[highlight_range[0]:highlight_range[1] + 1]
+        else:
+            view_data = df
+        y_min = view_data['low'].min()
+        y_max = view_data['high'].max()
+        y_margin = (y_max - y_min) * 0.1
+
+        layout_kwargs = dict(
             title=title,
             xaxis_title='日数',
-            yaxis_title='価格',
+            yaxis_title='変化率 (%)',
             yaxis_range=[y_min - y_margin, y_max + y_margin],
             template=self.plotly_theme,
             height=350,
@@ -189,6 +239,9 @@ class Visualizer:
             xaxis_rangeslider_visible=False,
             showlegend=False
         )
+        if initial_xrange is not None:
+            layout_kwargs['xaxis_range'] = list(initial_xrange)
+        fig.update_layout(**layout_kwargs)
         return fig
 
     def create_match_detail_charts(
@@ -204,37 +257,63 @@ class Visualizer:
         if target_patterns is None or symbols_data is None:
             return charts
 
-        # 銘柄ごとに最高類似度でソートして上位を取得
         if len(results_df) == 0:
             return charts
         best_per_symbol = results_df.groupby('symbol')['similarity'].max().sort_values(ascending=False)
         top_symbols = best_per_symbol.head(top_n_symbols).index.tolist()
 
+        ohlc_cols = ['open', 'high', 'low', 'close']
+
         for symbol in top_symbols:
             if symbol not in target_patterns or symbol not in symbols_data:
                 continue
 
-            # ターゲットパターンのチャート
             target_df = target_patterns[symbol]
+            window_size = len(target_df)
+
+            # ターゲットパターン（%変化率で正規化）
             charts[f'target_{symbol}'] = self.create_candlestick_chart(
-                target_df, f'{symbol} - ターゲットパターン（直近{len(target_df)}日）'
+                target_df, f'{symbol} - ターゲットパターン（直近{window_size}日）'
             )
 
             # 上位マッチのチャート
             symbol_matches = results_df[results_df['symbol'] == symbol].head(top_n_matches)
             full_df = symbols_data[symbol]
-            window_size = len(target_df)
 
             for rank, (_, row) in enumerate(symbol_matches.iterrows(), 1):
                 match_idx = int(row['match_index'])
-                match_df = full_df.iloc[match_idx:match_idx + window_size][['open', 'high', 'low', 'close']]
-                if len(match_df) == 0:
+
+                # 前後にコンテキストを追加（1xウィンドウ分）
+                padding = window_size
+                ctx_start = max(0, match_idx - padding)
+                ctx_end = min(len(full_df), match_idx + window_size + padding)
+                context_df = full_df.iloc[ctx_start:ctx_end][ohlc_cols]
+
+                if len(context_df) == 0:
                     continue
+
+                # ハイライト範囲（context_df内の相対位置）
+                hl_start = match_idx - ctx_start
+                hl_end = hl_start + window_size - 1
+
+                # 正規化の基準 = マッチ窓の先頭close
+                match_base_price = float(full_df.iloc[match_idx]['close'])
+
+                # 初期表示範囲（少し余白を持たせる）
+                initial_xrange = (hl_start - 2, hl_end + 2)
+
                 similarity = row['similarity']
                 future_ret = row.get('future_return')
                 ret_text = f' | リターン: {future_ret*100:+.2f}%' if pd.notna(future_ret) else ''
-                title = f'{symbol} - マッチ#{rank}（類似度: {similarity:.3f}{ret_text}）'
-                charts[f'match_{symbol}_{rank}'] = self.create_candlestick_chart(match_df, title)
+                period = f'{row["start_date"]} ~ {row["end_date"]}'
+                title = f'{symbol} - マッチ#{rank}（類似度: {similarity:.3f}{ret_text}）{period}'
+
+                charts[f'match_{symbol}_{rank}'] = self.create_candlestick_chart(
+                    context_df, title,
+                    base_price=match_base_price,
+                    highlight_range=(hl_start, hl_end),
+                    initial_xrange=initial_xrange
+                )
 
         return charts
 
